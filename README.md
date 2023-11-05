@@ -1,3 +1,11 @@
+# All-In or Fold fork
+This fork is implementing the All-In or Fold (AoF) variant of poker. Much like the Short Deck variant used in the original
+project, AoF is a very simplified version of poker. This was done in 2020 and I am just right now cleaning it up and
+committing to a fork.
+
+This fork also includes fixes and refactoring.
+
+
 | code-thing      | status        |
 | --------------- | ------------- |
 | master          | [![Build Status](https://travis-ci.org/fedden/poker_ai.svg?branch=master)](https://travis-ci.org/fedden/poker_ai)  |
@@ -17,11 +25,6 @@ This repository will contain a best effort open source implementation of a poker
 </p>
 
 _Made with love from the developers [Leon](https://www.leonfedden.co.uk) and [Colin](http://www.colinmanko.com/)._
-
-_A special thank you to [worldveil](https://github.com/worldveil) for originally writing [this awesome hand evaluator python2 module](https://github.com/worldveil/deuces), which was ported to python3 and [maintained here](https://github.com/fedden/poker_ai/tree/master/poker_ai/poker/evaluation)._
-
-## Join the Community
-[https://thepoker.ai](https://thepoker.ai)
 
 ## Prerequisites
 
@@ -70,38 +73,6 @@ Once you have an agent, and want to play against it, you can do the following:
 poker_ai play --help
 ```
 
-## Build a Bot
-
-### Cluster Hero Information
-
-In poker, the number of card combinations for one player on the river can exceed 56 billion combinations. In order to make this information tractable, we must group together strategically similar situations. We do this with two types of compression: lossy and lossless compression. Currently we only support a 20 card deck without modification.
-
-```bash
-poker_ai cluster
-```
-
-You'll save the combinations of public information in a file called card_info_lut.joblib located in your project directory.
-
-### Train your bot
-
-We use MCCFR to learn strategies. The MCCFR algorithm uses iterative self-play to adjust strategy based on regret. 
-
-```bash
-poker_ai train start
-```
-
-You'll create a folder in your project directory with the learned strategy and configuration files, in case you need to resume later.
-
-### Play your bot
-
-Finally, you can play your bot with the following command:
-
-```bash
-poker_ai play
-```
-
-You'll create a results.yaml file in ~/.poker/. So be sure to see how you stack up against your bot.
- 
 ## Running tests
 
 We are working hard on testing our components, but contributions here are always welcome. You can run the tests by cloning the code, changing directory to this repositories root directory (i.e `poker_ai/`) and call the python test library `pytest`:
@@ -109,33 +80,6 @@ We are working hard on testing our components, but contributions here are always
 cd /path/to/poker_ai
 pip install pytest
 pytest
-```
-
-See below on how to run the tests from the docker image.
-
-## Building the docker image
-
-We use a custom docker image for our testing suite. 
-
-You'll need to have computed the pickled card information lookup tables first (the cluster command for poker_ai). We build the images like below, in this case the luts are in './research/blueprint_algo'. First we build the parent image, with all of the dependancies.
-```bash
-docker build --build-arg LUT_DIR=research/blueprint_algo -f ParentDockerfile -t pokerai .
-```
-
-Then we build the test image.
-```bash
-docker build -t pokeraitest .
-```
-
-We then can run the tests with:
-```bash
-docker run -it pokeraitest pytest 
-```
-
-This is just a note for the developers, but we can push the parent image to the registry with the following (please ensure the version tag that comes after the colon is correct). We want to do this because we need various dependancies for the remote tests, and travis builds the `pokeraitest` image with the current git commit that has just been pushed.
-```bash
-docker tag pokerai pokerai/pokerai:1.0.0rc1
-docker push pokerai/pokerai:1.0.0rc1
 ```
 
 ## Building documentation
@@ -343,9 +287,3 @@ Feel free to start a discussion on the github issues or to reach out to me at le
 ## License
 
 The code is provided under the copy-left GPL licence. If you need it under a more permissive license then please contact me at leonfedden at gmail dot com.
-
-## Stargazers over time
-
-We appreciate you getting this far in the README file! If you like what we are doing, please give us a star and share with your friends! 
-
-[![Stargazers over time](https://starchart.cc/fedden/poker_ai.svg)](https://starchart.cc/fedden/poker_ai)
