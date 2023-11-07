@@ -58,19 +58,15 @@ class Card:
 
     def __lt__(self, other):
         return self.rank < other.rank
-        # raise NotImplementedError("Boolean operations not supported")
 
     def __le__(self, other):
         return self.rank <= other.rank
-        # raise NotImplementedError("Boolean operations not supported")
 
     def __gt__(self, other):
         return self.rank > other.rank
-        # raise NotImplementedError("Boolean operations not supported")
 
     def __ge__(self, other):
         return self.rank >= other.rank
-        # raise NotImplementedError("Boolean operations not supported")
 
     def __eq__(self, other):
         return int(self) == int(other)
@@ -95,6 +91,11 @@ class Card:
     def rank(self) -> str:
         """Get the rank as a string."""
         return self._rank_to_str(self._rank)
+
+    @property
+    def rank_char(self) -> str:
+        """Get the rank as a string."""
+        return self._rank_to_char(self._rank)
 
     @property
     def suit(self) -> str:
@@ -185,4 +186,3 @@ class Card:
         if set(x) != {"rank", "suit"}:
             raise NotImplementedError(f"Unrecognised dict {x}")
         return Card(rank=x["rank"], suit=x["suit"])
-
