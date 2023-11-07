@@ -13,6 +13,7 @@ from poker_ai.games.short_deck import state
 from poker_ai.ai.multiprocess.worker import Worker
 
 log = logging.getLogger("sync.server")
+log.setLevel(logging.FATAL)
 manager = mp.Manager()
 
 
@@ -31,8 +32,7 @@ class Server:
         dump_iteration: int,
         update_threshold: int,
         save_path: Union[str, Path],
-        lut_path: Union[str, Path] = ".",
-        pickle_dir: bool = False,
+        pickle_dir: Union[str, Path] = ".",
         agent_path: Optional[Union[str, Path]] = None,
         sync_update_strategy: bool = False,
         sync_cfr: bool = False,
@@ -40,6 +40,7 @@ class Server:
         sync_serialise: bool = False,
         start_timestep: int = 1,
         n_processes: int = mp.cpu_count() - 1,
+            # n_processes: int = 1,
     ):
         """Set up the optimisation server."""
         self._strategy_interval = strategy_interval
@@ -52,7 +53,6 @@ class Server:
         self._dump_iteration = dump_iteration
         self._update_threshold = update_threshold
         self._save_path = save_path
-        self._lut_path = lut_path
         self._pickle_dir = pickle_dir
         self._agent_path = agent_path
         self._sync_update_strategy = sync_update_strategy
@@ -61,7 +61,7 @@ class Server:
         self._sync_serialise = sync_serialise
         self._start_timestep = start_timestep
         self._info_set_lut: state.InfoSetLookupTable = utils.io.load_info_set_lut(
-            lut_path, pickle_dir
+            pickle_dir,
         )
         log.info("Loaded lookup table.")
         self._job_queue: mp.JoinableQueue = mp.JoinableQueue(maxsize=n_processes)
@@ -70,10 +70,8 @@ class Server:
         self._worker_status: Dict[str, str] = dict()
         self._agent: Agent = Agent(agent_path)
         self._locks: Dict[str, mp.synchronize.Lock] = dict(
-            regret=mp.Lock(), strategy=mp.Lock(), pre_flop_strategy=mp.Lock()
+            regret=mp.Lock(), strategy=mp.Lock(), ev=mp.Lock()
         )
-        if os.environ.get("TESTING_SUITE"):
-            n_processes = 4
         self._workers: Dict[str, Worker] = self._start_workers(n_processes)
 
     def search(self):
@@ -90,7 +88,7 @@ class Server:
         progress_bar = progress_bar_manager.counter(
             total=self._n_iterations, desc="Optimisation iterations", unit="iter"
         )
-        for t in range(self._start_timestep, self._n_iterations + 1):
+        for t in range(self._start_timestep, self._n_iterations):
             # Log any messages from the worker in this master process to avoid
             # weirdness with tqdm.
             while not self._logging_queue.empty():
@@ -116,13 +114,13 @@ class Server:
                 )
             progress_bar.update()
 
-    def terminate(self, safe: bool = False):
+
+    def terminate(self):
         """Kill all workers."""
-        if safe:
-            # Wait for all workers to finish their current jobs.
-            self._job_queue.join()
-            # Ensure all workers are idle.
-            self._wait_until_all_workers_are_idle()
+        # Wait for all workers to finish their current jobs.
+        self._job_queue.join()
+        # Ensure all workers are idle.
+        self._wait_until_all_workers_are_idle()
         # Send the terminate command to all workers.
         for _ in self._workers.values():
             name = "terminate"
@@ -146,7 +144,6 @@ class Server:
             dump_iteration=self._dump_iteration,
             update_threshold=self._update_threshold,
             save_path=self._save_path,
-            lut_path=self._lut_path,
             pickle_dir=self._pickle_dir,
             agent_path=self._agent_path,
             sync_update_strategy=self._sync_update_strategy,
@@ -168,18 +165,7 @@ class Server:
         return Server(**config)
 
     def job(self, job_name: str, sync_workers: bool = False, **kwargs):
-        """
-        Create a job for the workers.
-
-        ...
-
-        Parameters
-        ----------
-        job_name : str
-            Name of job.
-        sync_wrokers : bool
-            Whether or not to synchronize workers.
-        """
+        """Create a job for the workers."""
         func = self._syncronised_job if sync_workers else self._send_job
         func(job_name, **kwargs)
 
@@ -248,4 +234,3 @@ class Server:
             if all_idle and all_statuses_obtained:
                 break
             time.sleep(sleep_secs)
-            log.info({w: s for w, s in self._worker_status.items() if s != "idle"})

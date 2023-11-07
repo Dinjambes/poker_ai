@@ -4,10 +4,14 @@ import collections
 import copy
 import logging
 import operator
+import time
+import threading
 from typing import Dict, List, TYPE_CHECKING
 
 from poker_ai.poker.evaluation.evaluator import Evaluator
 from poker_ai.poker.state import PokerGameState
+# from applications.allinev import holdem_calc
+import subprocess
 
 if TYPE_CHECKING:
     from poker_ai.poker.player import Player
@@ -15,6 +19,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.FATAL)
 
 
 class PokerEngine:
@@ -33,6 +38,120 @@ class PokerEngine:
         self.evaluator = Evaluator()
         self.state = PokerGameState.new_hand(self.table)
         self.wins_and_losses = []
+
+    def _adjust_for_jackpot(self, herocards, allcards):
+        # Check if hero card are suited
+        if herocards[0][1:] != herocards[1][1:]:
+            return 0.
+        villaincards = copy.deepcopy(allcards)
+        villaincards.remove(herocards[0])
+        villaincards.remove(herocards[1])
+
+        suit = herocards[0][1:]
+        first_value = herocards[0][0:1]
+        second_value = herocards[1][0:1]
+
+        if first_value == 'T':
+            first_value = '10'
+        elif first_value == 'J':
+            first_value = '11'
+        elif first_value == 'Q':
+            first_value = '12'
+        elif first_value == 'K':
+            first_value = '13'
+        elif first_value == 'A':
+            first_value = '14'
+
+        if second_value == 'T':
+            second_value = '10'
+        elif second_value == 'J':
+            second_value = '11'
+        elif second_value == 'Q':
+            second_value = '12'
+        elif second_value == 'K':
+            second_value = '13'
+        elif second_value == 'A':
+            second_value = '14'
+
+        if first_value == '14' and (
+                second_value == '2' or second_value == '3' or second_value == '4' or second_value == '5'):
+            first_value = '1'
+        if second_value == '14' and (
+                first_value == '2' or first_value == '3' or first_value == '4' or first_value == '5'):
+            second_value = '1'
+
+        first_value = int(first_value)
+        second_value = int(second_value)
+
+        # order them
+        f_value = first_value if first_value < second_value else second_value
+        s_value = first_value if first_value > second_value else second_value
+
+        distance = abs(f_value - s_value) - 1
+        if distance <= 3:
+            combination_needed = []
+            if distance == 3:
+                combination_needed.insert(0, [first_value + 1, first_value + 2, first_value + 3])
+            elif distance == 2:
+                combination_needed.insert(0, [first_value + 1, first_value + 2,
+                                              first_value + 4])
+                combination_needed.insert(0, [first_value + 1, first_value + 2,
+                                              first_value - 1])
+            elif distance == 1:
+                combination_needed.insert(0, [first_value + 1, first_value + 3,
+                                              first_value + 4])
+                combination_needed.insert(0, [first_value + 1, first_value + 3,
+                                              first_value - 1])
+                combination_needed.insert(0, [first_value + 1, first_value - 1,
+                                              first_value - 2])
+            elif distance == 0:
+                combination_needed.insert(0, [first_value + 2, first_value + 3,
+                                              first_value + 4])
+                combination_needed.insert(0, [first_value + 2, first_value + 3,
+                                              first_value - 1])
+                combination_needed.insert(0, [first_value + 2, first_value - 1,
+                                              first_value - 2])
+                combination_needed.insert(0, [first_value - 1, first_value - 2,
+                                              first_value - 3])
+            combination_needed_parsed = []
+            for x in combination_needed:
+                if x[0] > 14 or x[1] > 14 or x[2] > 14:
+                    continue
+                elif x[0] < 1 or x[1] < 1 or x[2] < 1:
+                    continue
+
+                one_card_blocked = False
+                for i in x:
+                    if i == 1:
+                        i = 14
+                    for y in villaincards:
+                        villain_suit = y[1:]
+                        if villain_suit != suit:
+                            continue
+                        villain_card = y[0:1]
+                        if villain_card == 'T':
+                            villain_card = '10'
+                        elif villain_card == 'J':
+                            villain_card = '11'
+                        elif villain_card == 'Q':
+                            villain_card = '12'
+                        elif villain_card == 'K':
+                            villain_card = '13'
+                        elif villain_card == 'A':
+                            villain_card = '14'
+
+                        villain_card = int(villain_card)
+
+                        if villain_card == i:
+                            one_card_blocked = True
+
+                if not one_card_blocked:
+                    combination_needed_parsed.insert(0, x)
+
+            # 0.06% chance of winning, to make multiplication lower we do 6%. Because our buyin is 200 we have to make the prize 18000
+            print("JACKPOT EV FOUND FOR " + str(herocards) + " : " + str((180 * (len(combination_needed_parsed) * 0.06))))
+            return 180 * (len(combination_needed_parsed) * 0.06)
+        return 0.
 
     def play_one_round(self):
         """"""
@@ -61,12 +180,59 @@ class PokerEngine:
     def compute_winners(self):
         """Compute winners and payout the chips to respective players."""
         # From the active players on the table, compute the winners.
-        ranked_player_groups = self._rank_players_by_best_hand()
-        payouts = self._compute_payouts(ranked_player_groups)
+        payouts: Dict[Player, int] = {}
+
+        if self.n_active_players > 1:
+            player_cards = []
+            # For each active players, get their hands into an array
+            for player in self.table.players:
+                if player.is_active:
+                    for card in player.cards:
+                        player_cards.append(card.rank_char + card.suit.lower()[0])
+            # Calculate EV for the hand
+            # results = holdem_calc.calculate(None, False, 1000, None, player_cards, False)
+            results = []
+            command_array = ["/home/benjamin/pokerstove/build/bin/ps-eval"]
+            index = 0
+            for i in range(int(len(player_cards)/2)):
+                command_array.append(player_cards[index] + player_cards[index +1])
+                index += 2
+
+            print(f"{threading.get_ident()}===GOING TO CALL STOVE: {time.perf_counter()}")
+            process = subprocess.Popen(command_array,
+                                      stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+            output_array = stdout.decode('utf-8').splitlines()
+            print(f"{threading.get_ident()}===GOT RESPONSE FROM STOVE: {time.perf_counter()}")
+            for line in output_array:
+                equity = float(line.split()[4]) / 100
+                results.append(equity)
+
+            print(f"Calculated EV for hands {str(player_cards)} :{str(results)}")
+            # Instantiate payouts as ((self.state.table.pot-200)*results[1])-(200*sum(results[2:]))
+
+            index = 0
+            for player in self.table.players:
+                if player.is_active:
+                    float_winnings = (self.state.table.pot.total*results[index])-200
+
+                    # Adjust for jackpot EV
+                    herocards = player_cards[index*2:index*2+2]
+                    float_jackpot_ev = self._adjust_for_jackpot(herocards, player_cards)
+
+                    rounded = round(float_winnings + float_jackpot_ev, 0)
+                    payouts[player] = int(rounded) + 200
+
+                    index += 1
+        else:
+            ranked_player_groups = self._rank_players_by_best_hand()
+            payouts = self._compute_payouts(ranked_player_groups)
+
         self._payout_players(payouts)
-        logger.debug("Winnings computation complete. Players:")
+        logger.info("Winnings computation complete. Players:")
         for player in self.table.players:
-            logger.debug(f"{player}")
+            logger.info(f"{player}")
         # TODO(fedden): What if someone runs out of chips here?
 
     def _round_cleanup(self):

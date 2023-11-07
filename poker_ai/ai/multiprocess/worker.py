@@ -3,6 +3,7 @@ import multiprocessing as mp
 import os
 from pathlib import Path
 from typing import Dict, Union
+import time
 
 import joblib
 import numpy as np
@@ -87,14 +88,17 @@ class Worker(mp.Process):
         utils.random.seed(random_seed)
 
     def _cfr(self, t, i):
+        # print(f"CFR START: {time.perf_counter()}")
         """Search over random game and calculate the strategy."""
         self._setup_new_game()
+        # print(f"SETUP NEW GAME DONE: {time.perf_counter()}")
         use_pruning: bool = np.random.uniform() < 0.95
         pruning_allowed: bool = t > self._prune_threshold
         if pruning_allowed and use_pruning:
             ai.cfrp(self._agent, self._state, i, t, self._c, self._locks)
         else:
             ai.cfr(self._agent, self._state, i, t, self._locks)
+            # print(f"CFR CALL DONE: {time.perf_counter()}")
 
     def _discount(self, t):
         """Discount previous regrets and strategy."""
@@ -123,13 +127,60 @@ class Worker(mp.Process):
 
     def _serialise(self, t: int, server_state: Dict[str, Union[str, float, int, None]]):
         """Write progress of optimising agent (and server state) to file."""
-        ai.serialise(
-            agent=self._agent,
-            save_path=self._save_path,
-            t=t,
-            server_state=server_state,
-            locks=self._locks,
-        )
+        # Load the shared strategy that we accumulate into.
+        agent_path = os.path.abspath(str(self._save_path / f"agent.joblib"))
+        if os.path.isfile(agent_path):
+            offline_agent = joblib.load(agent_path)
+        else:
+            offline_agent = {"regret": {}, "timestep": t, "strategy": {}, "ev": {}}
+        # Lock shared dicts so no other process modifies it whilst writing to
+        # file.
+        # Calculate the strategy for each info sets regret, and accumulate in
+        # the offline agent's strategy.
+        # for info_set, this_info_sets_regret in sorted(self._agent.regret.items()):
+        #     self._locks["regret"].acquire()
+        #     strategy = ai.calculate_strategy(this_info_sets_regret)
+        #     self._locks["regret"].release()
+        #     if info_set not in offline_agent["strategy"]:
+        #         offline_agent["strategy"][info_set] = {
+        #             action: probability for action, probability in strategy.items()
+        #         }
+        #     else:
+        #         for action, probability in strategy.items():
+        #             offline_agent["strategy"][info_set][action] = probability
+        self._locks["regret"].acquire()
+        offline_agent["regret"] = copy.deepcopy(self._agent.regret)
+        self._locks["regret"].release()
+
+        self._locks["ev"].acquire()
+        offline_agent["ev"] = copy.deepcopy(self._agent.ev)
+        self._locks["ev"].release()
+
+        self._locks["strategy"].acquire()
+        normalized_strategy = copy.deepcopy(self._agent.strategy)
+
+        for _ in normalized_strategy.items():
+            normalising_sum = _[1]["fold"] + _[1]["allin"]
+            if normalising_sum > 0:
+                _[1]["fold"] /= normalising_sum
+                _[1]["allin"] /= normalising_sum
+            else:
+                _[1]["fold"] = np.ones_like(_[1]) / len(_[1])
+                _[1]["allin"] = np.ones_like(_[1]) / len(_[1])
+
+        offline_agent["strategy"] = normalized_strategy
+
+        self._locks["strategy"].release()
+        offline_agent["timestep"] = t
+        joblib.dump(offline_agent, agent_path)
+
+        # Dump the server state to file too, but first update a few bits of the
+        # state so when we load it next time, we start from the right place in
+        # the optimisation process.
+        server_path = self._save_path / f"server.gz"
+        server_state["agent_path"] = agent_path
+        server_state["start_timestep"] = t + 1
+        joblib.dump(server_state, server_path)
 
     def _update_status(self, status, log_status: bool = True):
         """Update the status of this worker by posting it to the server."""

@@ -38,6 +38,13 @@ class Deck:
         self._dealt_cards: List[Card] = []
         random.shuffle(self._cards_in_deck)
 
+
+    def get(self, rank: str, suit: str) -> Card:
+        for card in self._cards_in_deck:
+            if card.rank == rank and card.suit == suit:
+                return card
+
+
     def pick(self, random: bool = True) -> Card:
         """Return a card from the deck.
 

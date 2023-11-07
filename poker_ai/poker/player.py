@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
+# logger.setLevel(logging.DEBUG)
 
 class Player:
     """Abstract base class for all poker-playing agents.
@@ -48,7 +48,7 @@ class Player:
                 self.name,
                 self.n_chips,
                 self.n_bet_chips,
-                int(not self._is_active))
+                int(not self.is_active))
 
     def add_chips(self, chips: int):
         """Add chips."""
@@ -75,6 +75,11 @@ class Player:
         raise_action = Raise()
         raise_action(n_chips)
         return raise_action
+
+    def allin(self):
+        """Go all-in"""
+        n_chips = self.add_to_pot(self.n_chips)
+        return Call()
 
     def _try_to_make_full_bet(self, n_chips: int):
         """Ensures no bet is greater than the n_chips of chips left."""
