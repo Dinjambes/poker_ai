@@ -1,11 +1,3 @@
-# All-In or Fold fork
-This fork is implementing the All-In or Fold (AoF) variant of poker. Much like the Short Deck variant used in the original
-project, AoF is a very simplified version of poker. This was done in 2020 and I am just right now cleaning it up and
-committing to a fork.
-
-This fork also includes fixes and refactoring.
-
-
 | code-thing      | status        |
 | --------------- | ------------- |
 | master          | [![Build Status](https://travis-ci.org/fedden/poker_ai.svg?branch=master)](https://travis-ci.org/fedden/poker_ai)  |
@@ -16,15 +8,22 @@ This fork also includes fixes and refactoring.
 
 [Read the documentation]()
 
-# 🤖 Poker AI
+# 🤖 All-In or Fold Poker AI fork
 
-This repository will contain a best effort open source implementation of a poker AI using the ideas of Counterfactual Regret.
+This original repository contains an open source implementation of a poker AI using the ideas of Counterfactual Regret.
 
-<p align="center">
-  <img src="https://github.com/fedden/poker_ai/blob/develop/assets/poker.jpg">
-</p>
+This fork is implementing the All-In or Fold (AoF) variant of poker. Much like the Short Deck variant used in the original
+project, AoF is a very simplified version of poker. This was done in 2020 and I am just right now cleaning it up and
+committing to a fork.
 
-_Made with love from the developers [Leon](https://www.leonfedden.co.uk) and [Colin](http://www.colinmanko.com/)._
+This fork requires a local installation of pokerstove to calculate EV
+
+## _Changes Made_
+
+- Implemented AoF variant of poker
+- Created a script to get csv files for each potential situation
+- Added calculation of jackpot EV
+- Calculate EV based on real world hand data
 
 ## Prerequisites
 
@@ -244,37 +243,6 @@ engine = PokerEngine(
 # Play a round of Texas Hold'em Poker!
 engine.play_one_round()
 ```
-
-## Roadmap
-
-The following todo will change dynamically as my understanding of the algorithms and the poker_ai project evolves. 
-
-At first, the goal is to prototype in Python as iteration will be much easier and quicker. Once there is a working prototype, write in a systems level language like C++ and optimise for performance. 
-
-### 1. Game engine iteration.
-_Implement a multiplayer working heads up no limit poker game engine to support the self-play._
-- [x] Lay down the foundation of game objects (player, card etc).
-- [x] Add poker hand evaluation code to the engine.
-- [x] Support a player going all in during betting.
-- [x] Support a player going all in during payouts.
-- [x] Lots of testing for various scenarios to ensure logic is working as expected.
-
-### 2. AI iteration.
-_Iterate on the AI algorithms and the integration into the poker engine._
-- [x] Integrate the AI strategy to support self-play in the multiplayer poker game engine.
-- [x] In the game-engine, allow the replay of any round the current hand to support MCCFR. 
-- [x] Implement the creation of the blueprint strategy using Monte Carlo CFR miminisation.
-- [x] Add the real-time search for better strategies during the game.
-
-### 3. Game engine iteration.
-_Strengthen the game engine with more tests and allow users to see live visualisation of game state._
-- [x] Start work on a visualisation server to allow a game state to be displayed. 
-- [ ] Triple check that the rules are implemented in the poker engine as described in the supplimentary material.
-- [ ] Work through the coverage, adding more tests, can never have enough.
-
-<p align="center">
-  <img src="https://github.com/fedden/poker_ai/blob/develop/assets/regret.jpeg">
-</p>
 
 ## Contributing
 
